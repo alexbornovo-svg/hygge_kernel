@@ -1,2 +1,10 @@
-.vscode/
+# Build artifacts
 build/
+
+# Binary files
+*.bin
+*.o
+*.iso
+
+# Editor
+.vscode/

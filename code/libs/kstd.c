@@ -59,7 +59,7 @@ uint put_string(uint line, char *msg, uchar fg)
 	}
 }
 
-char get_string(uint line, char *prompt, uchar fg)
+char* get_string(uint line, char *prompt, uchar fg)
 {
     char msg[16];
     uint col = 0;
