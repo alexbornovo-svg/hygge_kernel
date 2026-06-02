@@ -49,14 +49,14 @@ ISO       := $(BUILD_DIR)/hygge.iso
 # ------------------------------------------------------------------------------
 #  Sources & objects
 # ------------------------------------------------------------------------------
-C_SRCS := $(wildcard $(SRC_DIR)/*.c)             \
+C_SRCS := $(wildcard $(SRC_DIR)/kernel/*.c)      \
            $(wildcard $(SRC_DIR)/drivers/*.c)     \
-           $(wildcard $(SRC_DIR)/progfiles/*.c)   \
+           $(wildcard $(SRC_DIR)/mm/*.c)          \
            $(wildcard $(SRC_DIR)/utils/*.c)       \
-           $(wildcard $(SRC_DIR)/libs/*.c)
+           $(wildcard $(SRC_DIR)/libs/*.c)        \
+           $(wildcard $(SRC_DIR)/progfiles/*.c)
 
-# Cerca i file .s sia nella root che in utils/
-ASM_SRCS := $(wildcard $(SRC_DIR)/*.s) \
+ASM_SRCS := $(wildcard $(SRC_DIR)/boot/*.s)      \
             $(wildcard $(SRC_DIR)/utils/*.s)
 
 # IMPORTANTE: Cambiamo l'estensione finale degli oggetti Assembly in .s.o per non sovrascrivere i .o del C

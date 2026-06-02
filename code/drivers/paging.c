@@ -1,6 +1,8 @@
 #include "types.h"
 #include "paging.h"
 
+static void switch_page_directory(uint32_t *dir);
+
 // Static table 4KB
 static uint32_t page_directory[1024] __attribute__((aligned(4096)));
 static uint32_t page_table_0[1024]   __attribute__((aligned(4096)));

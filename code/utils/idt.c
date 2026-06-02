@@ -1,11 +1,15 @@
 #include "types.h"
-#include "idt.h"
+#include "../code/utils/idt.h"
+#include "../code/utils/pic.h"
 #include "../code/libs/kstd.h"
+
+#include <stddef.h>
 
 struct idt_entry idt[256];
 struct idt_ptr   idtp;
 
-// isr :)
+static void (*irq_handlers[16])(registers_t *) = {0};
+
 extern void isr0(void);  extern void isr1(void);  extern void isr2(void);
 extern void isr3(void);  extern void isr4(void);  extern void isr5(void);
 extern void isr6(void);  extern void isr7(void);  extern void isr8(void);
@@ -18,6 +22,13 @@ extern void isr24(void); extern void isr25(void); extern void isr26(void);
 extern void isr27(void); extern void isr28(void); extern void isr29(void);
 extern void isr30(void); extern void isr31(void);
 
+extern void irq0(void);  extern void irq1(void);  extern void irq2(void);
+extern void irq3(void);  extern void irq4(void);  extern void irq5(void);
+extern void irq6(void);  extern void irq7(void);  extern void irq8(void);
+extern void irq9(void);  extern void irq10(void); extern void irq11(void);
+extern void irq12(void); extern void irq13(void); extern void irq14(void);
+extern void irq15(void);
+
 void idt_set_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t flags)
 {
     idt[num].base_low  = base & 0xFFFF;
@@ -27,17 +38,23 @@ void idt_set_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t flags)
     idt[num].flags     = flags;
 }
 
+void irq_install(uint8_t irq, void (*handler)(registers_t *))
+{
+    if (irq < 16)
+    {
+        irq_handlers[irq] = handler;
+    }
+}
+
 void init_idt(void)
 {
     idtp.limit = (sizeof(struct idt_entry) * 256) - 1;
-    idtp.base  = (uint32_t)&idt;
+    idtp.base = (uint32_t)&idt;
 
     for (int i = 0; i < 256; i++)
-    {
         idt_set_gate(i, 0, 0, 0);
-    }
 
-    // CPU exeptions
+    /* CPU exceptions ISR 0-31 */
     idt_set_gate(0,  (uint32_t)isr0,  0x08, 0x8E);
     idt_set_gate(1,  (uint32_t)isr1,  0x08, 0x8E);
     idt_set_gate(2,  (uint32_t)isr2,  0x08, 0x8E);
@@ -52,7 +69,7 @@ void init_idt(void)
     idt_set_gate(11, (uint32_t)isr11, 0x08, 0x8E);
     idt_set_gate(12, (uint32_t)isr12, 0x08, 0x8E);
     idt_set_gate(13, (uint32_t)isr13, 0x08, 0x8E);
-    idt_set_gate(14, (uint32_t)isr14, 0x08, 0x8E); // Page fault (very helpful i hope)
+    idt_set_gate(14, (uint32_t)isr14, 0x08, 0x8E); // page fault
     idt_set_gate(15, (uint32_t)isr15, 0x08, 0x8E);
     idt_set_gate(16, (uint32_t)isr16, 0x08, 0x8E);
     idt_set_gate(17, (uint32_t)isr17, 0x08, 0x8E);
@@ -71,14 +88,32 @@ void init_idt(void)
     idt_set_gate(30, (uint32_t)isr30, 0x08, 0x8E);
     idt_set_gate(31, (uint32_t)isr31, 0x08, 0x8E);
 
+    idt_set_gate(32, (uint32_t)irq0,  0x08, 0x8E);
+    idt_set_gate(33, (uint32_t)irq1,  0x08, 0x8E);
+    idt_set_gate(34, (uint32_t)irq2,  0x08, 0x8E);
+    idt_set_gate(35, (uint32_t)irq3,  0x08, 0x8E);
+    idt_set_gate(36, (uint32_t)irq4,  0x08, 0x8E);
+    idt_set_gate(37, (uint32_t)irq5,  0x08, 0x8E);
+    idt_set_gate(38, (uint32_t)irq6,  0x08, 0x8E);
+    idt_set_gate(39, (uint32_t)irq7,  0x08, 0x8E);
+    idt_set_gate(40, (uint32_t)irq8,  0x08, 0x8E);
+    idt_set_gate(41, (uint32_t)irq9,  0x08, 0x8E);
+    idt_set_gate(42, (uint32_t)irq10, 0x08, 0x8E);
+    idt_set_gate(43, (uint32_t)irq11, 0x08, 0x8E);
+    idt_set_gate(44, (uint32_t)irq12, 0x08, 0x8E);
+    idt_set_gate(45, (uint32_t)irq13, 0x08, 0x8E);
+    idt_set_gate(46, (uint32_t)irq14, 0x08, 0x8E);
+    idt_set_gate(47, (uint32_t)irq15, 0x08, 0x8E);
+
     idt_flush();
 }
 
-static void kpanic(uint line, const char *reason, const char *details)
+static void kpanic(const char *reason, const char *details)
 {
+    uint line = 0;
     line = put_string(line, "*** KERNEL PANIC ***", RED);
     line++;
-    line = put_string(line, (char *)reason,  WHITE);
+    line = put_string(line, (char *)reason, WHITE);
     line++;
     if (details)
     {
@@ -88,11 +123,8 @@ static void kpanic(uint line, const char *reason, const char *details)
     for (;;) __asm__ volatile("hlt");
 }
 
-// Dispatch
 void isr_handler(registers_t *regs)
 {
-    uint line = 0;
-
     if (regs->int_no == 14)
     {
         uint32_t fault_addr;
@@ -102,23 +134,21 @@ void isr_handler(registers_t *regs)
         uint8_t rw      =  (regs->err_code & 0x2);
         uint8_t user    =  (regs->err_code & 0x4);
 
-        if (present)
-        {
-            kpanic(line, "Page Fault: page not present", RED);
-        }
-        else if (rw)
-        {
-            kpanic(line, "Page Fault: write on read-only page", RED);
-        }
-        else if (user)
-        {
-            kpanic(line, "Page Fault: user mode violation", RED);
-        }
-        else 
-        {
-            kpanic(line, "Page Fault: unknown", RED);
-        }
+        if (present) kpanic("Page Fault: page not present", NULL);
+        else if (rw) kpanic("Page Fault: write on read-only page", NULL);
+        else if (user) kpanic("Page Fault: user mode violation", NULL);
+        else kpanic("Page Fault: unknown", NULL);
     }
 
-    kpanic(line, "Unhandled CPU exception", RED);
+    kpanic("Unhandled CPU exception", NULL);
+}
+
+void irq_handler(registers_t *regs)
+{
+    uint8_t irq = regs->int_no - IRQ_BASE;
+
+    if (irq_handlers[irq])
+        irq_handlers[irq](regs);
+
+    pic_eoi(irq);
 }

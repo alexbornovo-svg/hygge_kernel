@@ -29,6 +29,8 @@ typedef struct page_directory
 } page_directory_t;
 
 
+void init_paging();
+
 /*
 Inizializza il paging, crea la directory e mappa il kernel (Identity Mapping)
     void init_paging();

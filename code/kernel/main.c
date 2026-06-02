@@ -1,9 +1,11 @@
-#include "libs/kstd.h"
-#include "drivers/kbd.h"
-#include "utils/gdt.h"
-#include "utils/idt.h"
-#include "drivers/paging.h"
+#include "../code/libs/kstd.h"
+#include "../code/drivers/kbd.h"
+#include "../code/utils/gdt.h"
+#include "../code/utils/idt.h"
+#include "../code/drivers/paging.h"
 #include "string.h"
+#include "../code/progfiles/test.h"
+#include "../code/mm/kmalloc.h"
 
 void kmain(void)
 {
@@ -14,9 +16,15 @@ void kmain(void)
     init_gdt();
     line = put_string(line, "[OK]", GREEN); 
     line = put_string(line, "Initializing IDT... ", WHITE);
+    init_idt();
     line = put_string(line, "[OK]", GREEN);
     line = put_string(line, "Initializing Paging... ", WHITE);
+    init_paging();
     line = put_string(line, "[OK]", GREEN);
+    line = put_string(line, "Initializing KMalloc...", WHITE);
+    kmalloc_init();
+    line = put_string(line, "[OK]", GREEN);
+    line++;
 
     line = put_string(line, "Welcome to Hygge Kernel!", WHITE);
     line++;
@@ -31,11 +39,26 @@ void kmain(void)
 
         string_t input = string_form(in_buffer, sizeof(in_buffer));
         string_t ping  = STRING_LIT("ping");
+        string_t cls = STRING_LIT("cls");
+        string_t test = STRING_LIT("test");
 
         if (string_eq(ping, input))
         {
             line = put_string(line, "pong", WHITE);
             line++;
+        }
+        else if (string_eq(cls, input))
+        {
+            clearscreen();
+            line = 0;
+        }
+        else if (string_eq(test, input))
+        {
+            line = run_tests(line);
+        }
+        else
+        {
+            line = put_string(line, "[ERROR] Undeclared command", RED);
         }
 
         // Previene l'overflow dello schermo VGA (80x25)
