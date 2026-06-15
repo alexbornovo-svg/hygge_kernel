@@ -2,6 +2,7 @@
 #include "../code/drivers/kbd.h"
 #include "../code/libs/kstd.h"
 #include "../code/mm/kmalloc.h"
+#include "../code/utils/task.h"
 #include "types.h"
 
 /*
@@ -9,6 +10,22 @@ Batteria di test per GDT, IDT, Paging, IRQ, KMalloc
 */
 
 static uint test_line = 0;
+
+void task1(void)
+{
+    while (1)
+    {
+        __asm__ volatile("nop");
+    }
+}
+
+void task2(void)
+{
+    while (1)
+    {
+        __asm__ volatile("nop");
+    }
+}
 
 static uint test_pass(const char *name, uint test_line)
 {
@@ -92,21 +109,73 @@ static uint test_pic(uint test_line)
 
 static uint test_kmalloc(uint test_line)
 {
+    // Calcoliamo la dimensione dell'header allineata (uguale a quella in kmalloc.c)
+    // Se struct BlockHeader ha 2 puntatori/interi e un byte, occupa 12 byte, allineata a 8 = 16 byte.
+    // Sostituisci 16 con la dimensione reale se differisce, o esporta la macro dal tuo .h
+    const uint32_t HEADER_SIZE = 16; 
+
     void *a = kmalloc(64);
     void *b = kmalloc(64);
 
-    /* b deve essere 64 byte dopo a (allineato a 8) */
-    if (a != (void*)0 && b == (char*)a + 64)
-        test_line = test_pass("kmalloc: bump allocation", test_line);
+    /* CON LISTE CONCATENATE: b deve essere 64 byte + HEADER_SIZE dopo a */
+    if (a != (void*)0 && b == (char*)a + 64 + HEADER_SIZE)
+        test_line = test_pass("kmalloc: block allocation", test_line);
     else
-        test_line = test_fail("kmalloc: bump allocation", test_line);
+        test_line = test_fail("kmalloc: block allocation", test_line);
 
     /* kmalloc_aligned deve restituire indirizzo multiplo di 4096 */
     void *c = kmalloc_aligned(128);
-    if (((uint32_t)c & 0xFFF) == 0)
+    if (((uint32_t)c & 0xFFF) == 0 && c != (void*)0)
         test_line = test_pass("kmalloc: aligned allocation", test_line);
     else
         test_line = test_fail("kmalloc: aligned allocation", test_line);
+
+    /* NUOVO TEST: Verifica l'efficacia di kfree */
+    void *d = kmalloc(32);
+    kfree(d);
+    void *e = kmalloc(32);
+    
+    // Se kfree funziona, 'e' dovrebbe riutilizzare lo stesso blocco appena liberato da 'd'
+    if (d == e && d != (void*)0)
+        test_line = test_pass("kmalloc: dynamic kfree reuse", test_line);
+    else
+        test_line = test_fail("kmalloc: dynamic kfree reuse", test_line);
+
+    return test_line;
+}
+
+static uint test_scheduler(uint test_line)
+{
+    test_line = put_string(test_line, "Scheduler: init + task creation...", WHITE);
+
+    init_scheduler();
+
+    task_create(task1);
+    task_create(task2);
+
+    task_t* a = get_current_task();
+    task_t* b;
+
+    if (a != (void *)0)
+    {
+        test_line = put_string(test_line, "Scheduler: first task OK", GREEN);
+    }
+    else
+    {
+        return test_fail("Scheduler: first task", test_line);
+    }
+
+    scheduler_next((registers_t*)0);
+    b = get_current_task();
+
+    if (b != (void *)0 && b != a)
+    {
+        test_line = test_pass("Scheduler: context switch", test_line);
+    }
+    else
+    {
+        test_line = test_fail("Scheduler: context switch", test_line);
+    }
 
     return test_line;
 }
@@ -122,7 +191,7 @@ static uint test_page_fault(uint test_line)
     test_line = put_string(test_line, "IDT: triggering divide-by-zero...", WHITE);
     test_line++;
     __asm__ volatile("mov $0, %ecx; div %ecx");
-    test_fail("IDT: divide-by-zero NOT caught (bad!)", test_line);
+    test_fail("IDT: divide-by-zero NOT caught", test_line);
 }
 uint run_tests(uint start_line)
 {
@@ -133,6 +202,8 @@ uint run_tests(uint start_line)
     test_line = test_paging(test_line);
     test_line = test_pic(test_line);
     test_line = test_kmalloc(test_line);
+    test_line = test_scheduler(test_line);
     test_line = put_string(test_line, "--- Tests done ---", WHITE);
     return test_line;
 }
+

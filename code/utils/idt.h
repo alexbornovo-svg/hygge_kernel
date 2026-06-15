@@ -2,6 +2,7 @@
 #define IDT_H
 
 #include "types.h"
+#include "regs.h"
 
 #define IRQ_BASE 32
 
@@ -19,14 +20,6 @@ struct idt_ptr
     uint16_t limit;
     uint32_t base;
 } __attribute__((packed));
-
-typedef struct registers
-{
-    uint32_t ds;
-    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
-    uint32_t int_no, err_code;
-    uint32_t eip, cs, eflags, useresp, ss;
-} registers_t;
 
 extern struct idt_entry idt[256];
 extern struct idt_ptr   idtp;

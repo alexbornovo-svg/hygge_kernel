@@ -62,6 +62,26 @@ uint put_string(uint line, char *msg, uchar fg)
 }
 
 
+void scroll_screen()
+{
+    uint16_t* vga = VGA_MEMORY;
+
+    // Sposta ogni riga in alto di una posizione
+    for (int row = 1; row < VGA_HEIGHT; row++)
+    {
+        for (int col = 0; col < VGA_WIDTH; col++)
+        {
+            vga[(row - 1) * VGA_WIDTH + col] = vga[row * VGA_WIDTH + col];
+        }
+    }
+
+    // Pulisce l'ultima riga
+    for (int col = 0; col < VGA_WIDTH; col++)
+    {
+        vga[(VGA_HEIGHT - 1) * VGA_WIDTH + col] = (uint16_t)(WHITE << 8) | ' ';
+    }
+}
+
 /*
 line: starting point
 prompt: printed before the input

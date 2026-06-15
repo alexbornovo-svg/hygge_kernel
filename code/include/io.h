@@ -19,6 +19,14 @@ static inline uchar inb(ushort port)
     return val;
 }
 
+// In 16
+static inline uint16_t inw(uint16_t port)
+{
+    ushort val;
+    __asm__ volatile ("inw %1, %0" : "=a"(val) : "Nd"(port));
+    return val;
+}
+
 // Utils
 
 static inline void io_wait(void)

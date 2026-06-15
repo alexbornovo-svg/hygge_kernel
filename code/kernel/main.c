@@ -3,9 +3,10 @@
 #include "../code/utils/gdt.h"
 #include "../code/utils/idt.h"
 #include "../code/drivers/paging.h"
-#include "string.h"
+#include "../code/drivers/ata.h"
 #include "../code/progfiles/test.h"
 #include "../code/mm/kmalloc.h"
+#include "string.h"
 
 void kmain(void)
 {
@@ -17,6 +18,9 @@ void kmain(void)
     line = put_string(line, "[OK]", GREEN); 
     line = put_string(line, "Initializing IDT... ", WHITE);
     init_idt();
+    line = put_string(line, "[OK]", GREEN);
+    line = put_string(line, "Initializing ATA...", WHITE);
+    line = init_ata(line);
     line = put_string(line, "[OK]", GREEN);
     line = put_string(line, "Initializing Paging... ", WHITE);
     init_paging();
@@ -61,11 +65,11 @@ void kmain(void)
             line = put_string(line, "[ERROR] Undeclared command", RED);
         }
 
-        // Previene l'overflow dello schermo VGA (80x25)
-        if (line >= 24)
+        // Scrolling
+        if (line >= VGA_HEIGHT)
         {
-            clearscreen();
-            line = 0;
+            scroll_screen();
+            line = VGA_HEIGHT - 1;
         }
     }
 }

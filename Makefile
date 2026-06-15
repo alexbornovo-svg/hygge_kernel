@@ -45,6 +45,7 @@ BOOT_DIR  := $(ISO_DIR)/boot
 GRUB_DIR  := $(BOOT_DIR)/grub
 KERNEL    := $(BUILD_DIR)/kernel.bin
 ISO       := $(BUILD_DIR)/hygge.iso
+DISK_IMG  := $(BUILD_DIR)/disk.img
 
 # ------------------------------------------------------------------------------
 #  Sources & objects
@@ -119,25 +120,33 @@ iso: $(KERNEL)
 	@echo "  [OK] ISO: $(ISO)"
 
 # ------------------------------------------------------------------------------
+#  Hard Disk Generation (1MB)
+# ------------------------------------------------------------------------------
+$(DISK_IMG): | $(BUILD_DIR)
+	@echo "  Creating 1MB virtual hard drive..."
+	@dd if=/dev/zero of=$(DISK_IMG) bs=1M count=1 2>/dev/null
+	@echo "  [OK] Hard disk image created: $(DISK_IMG)"
+
+# ------------------------------------------------------------------------------
 #  Run targets
 # ------------------------------------------------------------------------------
 
-## run          — boot ISO in QEMU (32 MB RAM)
-run: iso
-	qemu-system-i386 -cdrom $(ISO) -m 32M
+## run         — boot ISO in QEMU with 1MB ATA Drive
+run: iso $(DISK_IMG)
+	qemu-system-i386 -cdrom $(ISO) -m 32M -drive file=$(DISK_IMG),format=raw,index=0,media=disk
 
-## run-bin      — boot kernel binary directly (no ISO)
-run-bin: $(KERNEL)
-	qemu-system-i386 -kernel $(KERNEL) -m 32M
+## run-bin      — boot kernel binary directly with 1MB ATA Drive
+run-bin: $(KERNEL) $(DISK_IMG)
+	qemu-system-i386 -kernel $(KERNEL) -m 32M -drive file=$(DISK_IMG),format=raw,index=0,media=disk
 
-## run-debug    — boot kernel with GDB stub on port 1234
-run-debug: $(KERNEL)
-	qemu-system-i386 -kernel $(KERNEL) -m 32M -s -S &
+## run-debug    — boot kernel with GDB stub and ATA Drive
+run-debug: $(KERNEL) $(DISK_IMG)
+	qemu-system-i386 -kernel $(KERNEL) -m 32M -drive file=$(DISK_IMG),format=raw,index=0,media=disk -s -S &
 	@echo ""
 	@echo "  QEMU paused — attach GDB with:"
-	@echo "    gdb $(KERNEL)"
-	@echo "    (gdb) target remote :1234"
-	@echo "    (gdb) continue"
+	@echo "      gdb $(KERNEL)"
+	@echo "      (gdb) target remote :1234"
+	@echo "      (gdb) continue"
 	@echo ""
 
 # ------------------------------------------------------------------------------

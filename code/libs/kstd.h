@@ -6,6 +6,7 @@
 #define VGA_ADDR ((volatile ushort *)0xB8000)
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
+#define VGA_MEMORY ((uint16_t*)0xB8000)
 
 #define WHITE 0xF
 #define GREY 0x7
@@ -19,5 +20,7 @@ uint put_string(uint line, char *msg, uchar fg);
 uint get_string(uint line, char *prompt, uchar fg, char *buf, uint buf_size);
 
 void clearscreen();
+
+void scroll_screen();
 
 #endif
