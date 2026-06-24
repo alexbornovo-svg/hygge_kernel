@@ -16,11 +16,18 @@
 
 uint put_char(uint line, uint col, char c, uchar fg, uchar bg);
 uint put_string(uint line, char *msg, uchar fg);
+void put_fmt(uint line, uint8_t color, const char *fmt, ...);
+static void uint32_to_dec(char *buf, uint32_t val);
+static void uint32_to_hex(char *buf, uint32_t val);
 
 uint get_string(uint line, char *prompt, uchar fg, char *buf, uint buf_size);
 
 void clearscreen();
 
 void scroll_screen();
+
+void kmemcpy(void *dst, const void *src, uint32_t n);
+void kmemset(void *dst, uint8_t val, uint32_t n);
+int kmemcmp(const void *a, const void *b, uint32_t n);
 
 #endif

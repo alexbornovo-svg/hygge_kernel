@@ -1,113 +1,176 @@
+#include "ata.h"
 #include "io.h"
 #include "types.h"
-#include "ata.h"
 #include "../code/libs/kstd.h"
+
+ata_drive_t ata_active_drive = {0};
+
+// IDENTIFY
+int ata_identify(uint16_t base, uint8_t drive_sel)
+{
+    // Seleziona il drive
+    outb(base + 6, drive_sel);
+    io_wait();
+
+    // Floating bus check: 0xFF = no hardware
+    if (inb(base + 7) == 0xFF)
+        return 0;
+
+    // Reset soft
+    outb(base + 2, 0);
+    outb(base + 3, 0);
+    outb(base + 4, 0);
+    outb(base + 5, 0);
+    outb(base + 7, 0xEC); // IDENTIFY
+    io_wait();
+
+    uint8_t status = inb(base + 7);
+    if (status == 0)
+        return 0; // drive non presente
+
+    // Aspetta BSY
+    int timeout = 100000;
+    while ((inb(base + 7) & ATA_STATUS_BSY) && timeout--)
+        ;
+    if (timeout <= 0)
+        return 0;
+
+    // ATAPI 
+    uint8_t lba_mid  = inb(base + 4);
+    uint8_t lba_high = inb(base + 5);
+    if (lba_mid != 0 || lba_high != 0)
+        return 0; 
+
+    // Waoit DRQ or ERR
+    timeout = 100000;
+    while (timeout--) {
+        status = inb(base + 7);
+        if (status & ATA_STATUS_ERR) return 0;
+        if (status & ATA_STATUS_DRQ) break;
+    }
+    if (timeout <= 0) return 0;
+
+    for (int i = 0; i < 256; i++) inw(base);
+
+    return 1;
+}
+
+int ata_detect(uint line)
+{
+    typedef struct { uint16_t base; uint8_t sel; const char *name; } candidate_t;
+    candidate_t candidates[4] = {
+        { ATA_PRIMARY_DATA,   ATA_DRIVE_MASTER, "[ATA] Primary Master"   },
+        { ATA_PRIMARY_DATA,   ATA_DRIVE_SLAVE,  "[ATA] Primary Slave"    },
+        { ATA_SECONDARY_DATA, ATA_DRIVE_MASTER, "[ATA] Secondary Master" },
+        { ATA_SECONDARY_DATA, ATA_DRIVE_SLAVE,  "[ATA] Secondary Slave"  },
+    };
+
+    for (int i = 0; i < 4; i++) {
+        if (ata_identify(candidates[i].base, candidates[i].sel)) {
+            ata_active_drive.base      = candidates[i].base;
+            ata_active_drive.drive_sel = candidates[i].sel;
+            ata_active_drive.present   = 1;
+            put_string(line, (char*)candidates[i].name, GREEN);
+            return 1;
+        }
+    }
+
+    put_string(line, "[ATA] No disk found", RED);
+    return 0;
+}
 
 uint init_ata(uint line)
 {
-    // line = put_string(line, "[ATA] -- WIP --", GREY);
-
-    int diskfound = search_ata();
-
-    if (diskfound)
-    {
-        // line = put_string(line, "[ATA] Disk found", GREY);
-    }
-    else 
-    {
-        line = put_string(line, "[ATA] Disk not found", RED);
+    if (!ata_detect(line)) {
+        line = put_string(line, "[ATA] Init failed", RED);
         return line;
     }
-
-    outb(ATA_REG_DRIVE_SEL, 0xE0);
-    io_wait();
-
-    outb(ATA_REG_SEC_COUNT, 0);
-    outb(ATA_REG_LBA_LOW, 0);
-    outb(ATA_REG_LBA_MID, 0);
-    outb(ATA_REG_LBA_HIGH, 0);
-    // line = put_string(line, "[ATA] REG 2-5 0", GREY);
-    io_wait();
-
-    outb(ATA_REG_COMMAND, 0xEC);
-    io_wait();
-    // line = put_string(line, "[ATA] Command 0xEC (IDENTIFY)", GREY);
-
-    while (inb(ATA_REG_STATUS) & ATA_STATUS_BSY) {
-        // Waiting the hardware
-    }
-
-    uchar status = inb(ATA_REG_STATUS);
-    if (status == 0) 
-    {
-        // line = put_string(line, "[ATA] Driver doesn't support 0xEC (IDENTIFY)", RED);
-        return line;
-    }
-
-    while (!(inb(ATA_REG_STATUS) & ATA_STATUS_DRQ)) 
-    {
-        // Waiting for data to be ready
-    }
-
-    // line = put_string(line, "[ATA] Data ready", GREEN);
-
+    line = put_string(line, "[ATA] Init OK", GREEN);
     return line;
 }
 
+// compatibility
 int search_ata()
 {
-    uint16_t val = inw(ATA_REG_STATUS);
-
-    if (val == 0xFF)
-    {
-        return 0;
-    }
-    else
-    {
-        return 1;
-    }
+    uint16_t val = inw(ATA_PRIMARY_STATUS);
+    return (val != 0xFF) ? 1 : 0;
 }
 
 void ata_read_sector(uint32_t lba, uint16_t *buffer)
 {
-    outb(ATA_REG_DRIVE_SEL, 0xE0 | ((lba >> 24) & 0x0F));
+    uint16_t base = ata_active_drive.base;
+    uint8_t  sel  = ata_active_drive.drive_sel | ((lba >> 24) & 0x0F);
 
-    outb(ATA_REG_SEC_COUNT, 1);                 // Reading sector 1
-    outb(ATA_REG_LBA_LOW, (uchar)(lba));        // Bit 0-7
-    outb(ATA_REG_LBA_MID, (uchar)(lba >> 8));   // Bit 8-15
-    outb(ATA_REG_LBA_HIGH, (uchar)(lba >> 16));
+    outb(base + 6, sel);
+    outb(base + 2, 1);
+    outb(base + 3, (uchar)(lba));
+    outb(base + 4, (uchar)(lba >> 8));
+    outb(base + 5, (uchar)(lba >> 16));
+    outb(base + 7, 0x20); // READ SECTORS
 
-    outb(ATA_REG_COMMAND, 0x20);
-    io_wait(); // freetime for the hardware
+    io_wait();
+    while (inb(base + 7) & ATA_STATUS_BSY);
+    while (!(inb(base + 7) & ATA_STATUS_DRQ));
 
-    while (inb(ATA_REG_STATUS) & 0x80);     // waiting
-    while (!(inb(ATA_REG_STATUS) & 0x08));
-
-    for (int i = 0; i < 256; i++) 
+    for (int i = 0; i < 256; i++)
     {
-        buffer[i] = inw(ATA_REG_DATA);
+        buffer[i] = inw(base);
     }
+}
+
+void ata_write_sector(uint32_t lba, uint16_t *buffer)
+{
+    uint16_t base = ata_active_drive.base;
+    uint8_t  sel  = ata_active_drive.drive_sel | ((lba >> 24) & 0x0F);
+
+    outb(base + 6, sel);
+    outb(base + 2, 1);
+    outb(base + 3, (uchar)(lba));
+    outb(base + 4, (uchar)(lba >> 8));
+    outb(base + 5, (uchar)(lba >> 16));
+    outb(base + 7, 0x30); // WRITE SECTORS
+
+    io_wait();
+    while (inb(base + 7) & ATA_STATUS_BSY);
+    while (!(inb(base + 7) & ATA_STATUS_DRQ));
+
+    for (int i = 0; i < 256; i++)
+    {
+        outw(base, buffer[i]);
+    }
+
+    outb(base + 7, 0xE7); // CACHE FLUSH
+    io_wait();
+    while (inb(base + 7) & ATA_STATUS_BSY);
 }
 
 uint ata_get_harddisk_vendor(uint line)
 {
-    uint16_t identify_buf[256];
-    for (int i = 0; i < 256; i++) {
-        identify_buf[i] = inw(ATA_REG_DATA);
+
+    uint16_t base = ata_active_drive.base;
+    outb(base + 6, ata_active_drive.drive_sel);
+    io_wait();
+    outb(base + 7, 0xEC);
+    io_wait();
+    while (inb(base + 7) & ATA_STATUS_BSY);
+    while (!(inb(base + 7) & ATA_STATUS_DRQ));
+
+    uint16_t buf[256];
+    for (int i = 0; i < 256; i++)
+    {
+        buf[i] = inw(base);
     }
 
-    char model_string[41];
-    int out_idx = 0;
-
+    char model[41];
+    int idx = 0;
     for (int i = 27; i <= 46; i++) 
     {
-        model_string[out_idx]     = (char)(identify_buf[i] >> 8);
-        model_string[out_idx + 1] = (char)(identify_buf[i] & 0xFF);
-        out_idx += 2;
+        model[idx++] = (char)(buf[i] >> 8);
+        model[idx++] = (char)(buf[i] & 0xFF);
     }
-    model_string[40] = '\0';
-    line = put_string(line, "[ATA] Vendor: ", GREY);
-    line = put_string(line, model_string, GREEN);
+    model[40] = '\0';
 
+    line = put_string(line, "[ATA] Vendor: ", GREY);
+    line = put_string(line, model, GREEN);
     return line;
 }

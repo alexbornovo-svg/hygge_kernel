@@ -55,6 +55,7 @@ C_SRCS := $(wildcard $(SRC_DIR)/kernel/*.c)      \
            $(wildcard $(SRC_DIR)/mm/*.c)          \
            $(wildcard $(SRC_DIR)/utils/*.c)       \
            $(wildcard $(SRC_DIR)/libs/*.c)        \
+           $(wildcard $(SRC_DIR)/fs/*.c)        \
            $(wildcard $(SRC_DIR)/progfiles/*.c)
 
 ASM_SRCS := $(wildcard $(SRC_DIR)/boot/*.s)      \
@@ -123,9 +124,10 @@ iso: $(KERNEL)
 #  Hard Disk Generation (1MB)
 # ------------------------------------------------------------------------------
 $(DISK_IMG): | $(BUILD_DIR)
-	@echo "  Creating 1MB virtual hard drive..."
-	@dd if=/dev/zero of=$(DISK_IMG) bs=1M count=1 2>/dev/null
-	@echo "  [OK] Hard disk image created: $(DISK_IMG)"
+	@echo "  Creating ext2 virtual hard drive..."
+	@dd if=/dev/zero of=$(DISK_IMG) bs=1M count=4 2>/dev/null
+	@mkfs.ext2 $(DISK_IMG)
+	@echo "  [OK] ext2 disk image created: $(DISK_IMG)"
 
 # ------------------------------------------------------------------------------
 #  Run targets

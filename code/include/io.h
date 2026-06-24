@@ -3,15 +3,20 @@
 
 #include "types.h"
 
-// Out
-
+// Out 8
 static inline void outb(ushort port, uchar val)
 {
     __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
 }
 
-// In
+// Out 16
+static inline void outw(uint16_t port, uint16_t val)
+{
+    __asm__ volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
+}
 
+
+// In 8
 static inline uchar inb(ushort port)
 {
     uchar val;
